@@ -1,0 +1,41 @@
+name: build fedora rpm
+on:
+  push:
+jobs:
+
+  rpmbuild:
+    strategy:
+      matrix:
+        version: [31, 34, 38]
+    continue-on-error: true
+
+    runs-on: ubuntu-latest
+    container: fedora:${{ matrix.version }}
+
+    steps:
+    - name: Get dependencies
+      run: >
+        dnf install -y poppler-glib python3-pip python3-gobject gtk3 python3-cairo
+        python3-wheel python3-pikepdf python3-img2pdf python3-dateutil libhandy
+        rpm-build git tar python3-devel gettext desktop-file-utils libappstream-glib
+
+    - name: Get source (just for the spec file)
+      uses: actions/checkout@v4
+      with:
+        path: repo
+
+    - name: Make a tarball
+      run: |
+        dir=pdfarranger-${GITHUB_SHA}
+        tarball=pdfarranger-${GITHUB_SHA::7}.tar.gz
+        git -C repo/ ls-files | tar -C repo/ --xform "s,^,${dir}/," -czf ${tarball} -T -
+        ls $PWD/${tarball}
+
+    - name: Build RPM
+      # NB: uses GITHUB_REPOSITORY and GITHUB_SHA from environment
+      run: rpmbuild -D "_topdir $GITHUB_WORKSPACE/rpmbuild" -D "_sourcedir $PWD" -ba repo/pdfarranger.spec
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: pdfarranger-fedora${{ matrix.version }}-testbuild
+        path: rpmbuild/**/*.rpm
